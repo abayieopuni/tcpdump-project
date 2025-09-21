@@ -1,0 +1,11 @@
+# Ignore packet captures
+*.pcap
+*.pcapng
+
+# Ignore OS junk
+.DS_Store
+Thumbs.db
+
+# Ignore editor files
+.vscode/
+.idea/
