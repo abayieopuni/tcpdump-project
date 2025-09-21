@@ -1,17 +1,17 @@
 methodology.md
-# 🛠 Methodology – PCAP Analysis with tcpdump
+🛠 Methodology – PCAP Analysis with tcpdump
 
-This document explains, step by step, how I used **tcpdump** to analyze the packet capture (`tcpdump_challenge.pcap`).  
-Each stage of analysis is supported by screenshots for clarity.
+This document explains how I used tcpdump to analyze the packet capture (tcpdump_challenge.pcap).
+Each step includes the exact command, observation, and a matching screenshot.
 
----
+1) Verify tcpdump Installation
 
-## 1. Verify tcpdump Installation
-I started by confirming that tcpdump was installed and checking its version.
+Command
 
-```bash
 tcpdump --version
 
+
+Observation
 
 tcpdump v4.99.4
 
@@ -19,134 +19,161 @@ libpcap v1.10.4
 
 OpenSSL 3.0.13
 
-📸 Screenshot:
+Screenshot
 
-2. Count Packets in the Capture
 
-To get an overview of the dataset size:
+2) Count All Packets
+
+Command
 
 tcpdump -r tcpdump_challenge.pcap | wc -l
 
 
+Observation
+
 Total packets: 1344
 
-📸 Screenshot:
+Screenshot
 
-3. Count ICMP Packets
 
-Filtered only ICMP traffic to check for reconnaissance or ping activity:
+3) Count ICMP Packets
+
+Command
 
 tcpdump -r tcpdump_challenge.pcap icmp | wc -l
 
 
+Observation
+
 ICMP packets: 132
 
-📸 Screenshot:
+Screenshot
 
-4. Inspect ICMP Echo Requests
 
-Displayed the ICMP Echo Requests to identify source and destination:
+4) Inspect ICMP Echo Requests
+
+Command
 
 tcpdump -r tcpdump_challenge.pcap 'icmp and icmp[icmptype] == icmp-echo'
 
+
+Observation
 
 Source: 10.0.2.10
 
 Destination: 172.67.72.15
 
-📸 Screenshot:
+Screenshot
 
-5. Attribute the Destination IP
 
-Used whois to identify ownership of the destination IP.
+5) Attribute the Destination IP
+
+Commands
 
 whois 172.67.72.15 | grep -i 'origin\|descr'
 whois -h whois.cymru.com "172.67.72.15"
 
 
+Observation
+
 ASN: 13335
 
 Owner: Cloudflare (CLOUDFLARENET, US)
 
-📸 Screenshot:
+Screenshot
 
-6. Inspect DNS and HTTP Traffic
 
-Viewed ASCII payloads to check for DNS queries and HTTP requests.
+6) Inspect DNS & HTTP Payloads (ASCII)
+
+Command
 
 tcpdump -r tcpdump_challenge.pcap -A
 
 
+Observation
+
 DNS queries for meter.net, huffpost.com, youtube.com
 
-Responses resolved 172.67.72.15 (Cloudflare)
+Responses include Cloudflare IPs such as 172.67.72.15
 
-📸 Screenshot:
+Screenshot
 
-7. Confirm ICMP Replies
 
-Validated that the Cloudflare server responded to the ICMP requests:
+7) Confirm ICMP Echo Replies
+
+Command
 
 tcpdump -r tcpdump_challenge.pcap icmp
 
 
-Observed ICMP echo reply messages.
+Observation
 
-📸 Screenshot:
+ICMP echo replies observed from 172.67.72.15 to 10.0.2.10
 
-8. Identify HTTP POST Requests
+Screenshot
 
-Searched the capture for HTTP POST traffic (often used for credentials).
+
+8) Identify HTTP POST Requests
+
+Commands
 
 tcpdump -r tcpdump_challenge.pcap -A | grep -i "post"
 tcpdump -r tcpdump_challenge.pcap -A | grep -c "post"
 
 
-Found 10 HTTP POST requests
+Observation
 
-Included traffic to www.huffpost.com
+10 HTTP POSTs found
 
-📸 Screenshot:
+Includes traffic to www.huffpost.com
 
-9. Extract Cleartext Credentials (HTTP)
-
-Filtered for sensitive parameters like username and password.
-
-tcpdump -nr tcpdump_challenge.pcap -A \
-| egrep -i 'password=|user=|username=|Authorization: Basic'
+Screenshot
 
 
-Discovered:
+9) Extract Cleartext Credentials (HTTP)
+
+Command
+
+tcpdump -nr tcpdump_challenge.pcap -A | egrep -i 'password=|user=|username=|Authorization: Basic'
+
+
+Observation
+
+Credentials in POST body:
 
 Username: bsmith
 
 Password: ilovecats9102
 
-📸 Screenshot:
+Screenshot
 
-10. Analyze TCP Ports
 
-Checked which TCP ports were most active.
+10) Analyze Active TCP Ports
+
+Command
 
 tcpdump -nr tcpdump_challenge.pcap -nn tcp \
 | awk '{for(i=1;i<=NF;i++){if($i==">"){split($(i-1),a,".");print a[length(a)];split($(i+1),b,".");print b[length(b)]}}}' \
 | sort -n | uniq -c | sort -nr
 
 
-Most traffic: HTTP (80)
+Observation
 
-Also present: FTP (21)
+Port 80 (HTTP) dominates
 
-📸 Screenshot:
+Port 21 (FTP) present → investigate
 
-11. Extract FTP Credentials
+Screenshot
 
-Filtered traffic on port 21 for FTP login attempts.
+
+11) Extract FTP Credentials (Cleartext)
+
+Command
 
 tcpdump -nr tcpdump_challenge.pcap -nn -s0 -A port 21 | egrep -i "USER|PASS"
 
 
-Cleartext credentials observed:
+Observation
 
 admin : admin
 
@@ -156,47 +183,55 @@ administrator : password
 
 admin : password123
 
-📸 Screenshot:
+Screenshots
 
-📸 Screenshot:
 
-📸 Screenshot:
 
-12. Inspect HTTP User-Agent Strings
 
-Searched HTTP headers for User-Agent information.
+
+
+12) Inspect HTTP User-Agent Strings
+
+Command
 
 tcpdump -nr tcpdump_challenge.pcap -s0 -A port 80 | grep -i "User-Agent"
 
 
-Normal traffic: Chromium on Ubuntu
+Observation
 
-Suspicious: TeslaBrowser/5.5
+Normal UA: Chromium on Ubuntu
 
-Followed up to inspect TeslaBrowser traffic:
+Suspicious UA: TeslaBrowser/5.5
+
+Follow-up Command
 
 tcpdump -nr tcpdump_challenge.pcap -s0 -A port 80 | grep -A20 -B20 "TeslaBrowser/5.5"
 
 
+Observation
+
 Destination: t.me (Telegram)
 
-Request path: /+zz0192Iskaaa
+Path: /+zz0192Iskaaa → automation/C2-like
 
-📸 Screenshot:
+Screenshots
 
-📸 Screenshot:
 
-📸 Screenshot:
 
-13. Confirm YouTube Activity
 
-Verified benign activity (user streaming a YouTube video).
+
+
+13) Confirm Benign YouTube Activity
+
+Command
 
 tcpdump -nr tcpdump_challenge.pcap -s0 -A port 80 | grep -i "youtube"
 
+
+Observation
 
 Host: www.youtube.com
 
 Path: /watch?v=dQw4w9WgXcQ
 
-📸 Screenshot:
+Screenshot
